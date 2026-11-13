@@ -146,6 +146,6 @@ def ask(request: AskRequest):
     if turns[0]['role'] != 'user' or turns[-1]['role'] != 'user':
         raise HTTPException(422, "The conversation must start and end with a question.")
     try:
-        return {'answer': assistant.ask(request.result, turns)}
+        return assistant.ask(request.result, turns)
     except assistant.AssistantError as error:
         raise HTTPException(error.status, error.message)

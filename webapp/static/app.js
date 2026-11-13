@@ -214,6 +214,21 @@ function addChatMessage(role, text) {
   return message;
 }
 
+// Only URLs the server verified (from search results or trusted sites) become links;
+// everything else stays plain text
+function setLinkedText(node, text, sources) {
+  const verified = new Set(sources.map((source) => source.url));
+  node.replaceChildren(...text.split(/(https:\/\/[^\s()<>[\]"]+)/).map((part) => {
+    const url = part.replace(/[.,;:]+$/, '');
+    if (!verified.has(url)) return document.createTextNode(part);
+    const link = el('a', '', url.replace(/^https:\/\/(www\.)?/, '').replace(/\/$/, ''));
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    return [link, part.slice(url.length)];
+  }).flat());
+}
+
 function resetChat(data) {
   // The images are large and the assistant must not see them anyway
   const { original, image, heatmap: _, cam, model_view, ...numbers } = data;
@@ -221,7 +236,7 @@ function resetChat(data) {
   chat = [];
   $('chat-log').replaceChildren();
   $('explain').hidden = false;
-  $('chat-form').hidden = true;
+  $('chat-form').hidden = false;
 }
 
 async function askAssistant(question) {
@@ -242,7 +257,7 @@ async function askAssistant(question) {
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The assistant could not answer.');
     conversation.push({ role: 'assistant', content: data.answer });
     pending.className = 'chat-msg assistant';
-    pending.textContent = data.answer;
+    setLinkedText(pending, data.answer, data.sources || []);
     $('explain').hidden = true;
     $('chat-form').hidden = conversation.length >= MAX_TURNS;
   } catch (error) {

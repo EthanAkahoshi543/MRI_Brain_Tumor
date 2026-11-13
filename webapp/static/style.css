@@ -658,7 +658,10 @@ html { scroll-behavior: smooth; }
 .chat-msg.assistant { background: var(--surface-2); }
 .chat-msg.pending { color: var(--muted); }
 .chat-msg.error { color: var(--tumor); background: var(--tumor-soft); }
+.chat-msg a { color: var(--accent); }
+.crisis-line { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; color: var(--text); background: var(--surface-2); border-radius: var(--radius-sm); }
 .chat-form { display: flex; gap: 0.5rem; }
+#explain + .chat-form { margin-top: 0.75rem; }
 .chat-form input {
   flex: 1;
   min-width: 0;

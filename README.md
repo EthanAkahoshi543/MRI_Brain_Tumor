@@ -1,6 +1,6 @@
 # MRI VisionGuard
 
-A small convolutional neural network that classifies brain MRI slices as tumour or no tumour, wrapped in a web app that shows where the model looked and how far each answer can be trusted.
+A web app that looks at a brain MRI image and says whether it shows a tumour. It also shows which part of the scan the decision was based on, and it says how far the answer can be trusted.
 
 > **Research and teaching project.** It is not a medical device and must not be used to diagnose or treat anyone.
 
@@ -8,74 +8,82 @@ A small convolutional neural network that classifies brain MRI slices as tumour 
 
 ## What it does
 
-You upload one axial MRI slice (JPEG or PNG). The app then:
+You upload one image from a brain MRI scan. The app then:
 
-1. Checks the image quality with nine OpenCV measurements: sharpness, brightness, saturated pixels, contrast, crop, background, resolution, stray marks and colour.
-2. Crops the scan to the head and runs the model, which returns a tumour score between 0 and 1. A score of 0.5 or more counts as tumour.
-3. Draws a Grad-CAM heatmap of the regions that pushed the model towards its answer. The heatmap builds up live, strongest region first.
-4. Runs a rule-based reliability check. Depending on what the quality checks found, it may re-test the scan once (contrast boost, tighter crop or mirror image) and see whether the answer holds. Each result gets a status (consistent, sensitive, poor quality or needs review) and a step-by-step decision trace.
+1. **Checks the image quality.** It runs nine checks, for example whether the image is blurry, too dark or badly cropped.
+2. **Makes a prediction.** A small AI model, trained from scratch for this project, gives a tumour score from 0 to 1. A score of 0.5 or higher counts as a tumour.
+3. **Shows where it looked.** A heatmap is drawn over the scan to show which areas pushed the model towards its answer. The strongest area appears first.
+4. **Checks its own answer.** If the image quality is borderline, the app tests a slightly changed copy of the scan (more contrast, a tighter crop or a mirror image) to see whether the answer changes. Each result is labelled consistent, sensitive, poor quality or needs review, and the app lists each step that led to that label. This check never changes the prediction.
 
-The reliability check never changes the prediction. It only reports how stable the prediction is.
-
-Under each result, an optional assistant explains it in plain English and answers follow-up questions about it. It uses Claude through the Anthropic API and receives only the numbers (scores, quality checks, reliability status and decision trace), never the image. It is told to explain the app's output and never to give a diagnosis or medical advice.
-
-![A result: Grad-CAM heatmap, prediction and decision trace](docs/screenshots/result.png)
-
-The heatmap is revealed strongest-first, so the region that drove the prediction appears before the weaker influence around it:
+![A result: heatmap, prediction and the steps behind it](docs/screenshots/result.png)
 
 ![Four frames of the heatmap building up over about 1.5 seconds](docs/screenshots/heatmap-reveal.png)
 
-## Results
+### Ask about this result
 
-All figures are from [`docs/evaluation.md`](docs/evaluation.md). The model and its threshold were chosen on the validation split only.
+Under each result there is an optional chat assistant, powered by Claude (Anthropic's AI model). It explains the result in everyday language and answers follow-up questions. For people who have been diagnosed by a doctor, or who care for someone who has, it can also talk through usual next steps and help find counselling and support groups nearby.
 
-| Test set | Scans | Balanced accuracy | Sensitivity | Specificity | ROC-AUC |
-|---|---|---|---|---|---|
-| Leak-free test split | 599 | 93.8% | 93.6% | 93.9% | 0.968 |
-| Testing benchmark | 1,600 | 90.2% | 92.9% | 87.5% | 0.964 |
-| Held-out external set | 253 | 84.7% | 73.5% | 95.9% | 0.942 |
+It was built with safety rules:
 
-Sensitivity is the share of tumours the model caught. Specificity is the share of healthy scans it correctly cleared.
+- It sees only the numbers from the result, never the image.
+- It never treats the app's prediction as a diagnosis and always sends people to their doctor about their own health.
+- It searches only trusted health, cancer and crisis-support websites, and links to the sources it used.
+- If someone sounds in distress, it gives crisis lines first (988 and 911 in the US, Samaritans in the UK).
 
-The external set was kept out of training, but it comes from the same original source as part of the training data, so it is not a test on a different hospital. On it the model misses about one tumour in four, which is the main weakness.
+## How well it works
 
-### Healthy scans from a new source
+The model was tested on scans it never saw during training.
 
-To test on data from a genuinely different source, the model was run on the [IXI dataset](https://brain-development.org/ixi-dataset/) (CC BY-SA 3.0): T1 scans of 581 healthy volunteers from three London hospitals, three axial slices each. None of it was used for training. See [`docs/evaluation.md`](docs/evaluation.md) for how the slices were taken.
+| Test set | Scans | Tumours caught | Healthy scans correctly cleared |
+|---|---|---|---|
+| Main test set | 599 | 93.6% | 93.9% |
+| Public benchmark set | 1,600 | 92.9% | 87.5% |
+| Held-out set | 253 | 73.5% | 95.9% |
 
-- 95.6% of the 1,743 slices were correctly cleared (76 false tumour calls).
-- The reliability check sent 46% of the false tumour calls to human review, against 3.4% of the correct answers. A wrong answer was about 13 times more likely to be flagged.
+The held-out set comes from the same original source as part of the training data, so it is not a test on scans from a different hospital. It shows the model's main weakness: it misses about one tumour in four there.
 
-IXI has no tumour scans, so it says nothing about sensitivity on a new source.
+To test on scans from a different source, the model was also run on 1,743 images of healthy brains from three London hospitals (the [IXI dataset](https://brain-development.org/ixi-dataset/), CC BY-SA 3.0). None of these were used in training.
 
-## Fixing a shortcut
+- 95.6% were correctly cleared as healthy.
+- The self-check flagged 46% of the wrong answers for a human to review, but only 3.4% of the right ones. A wrong answer was about 13 times more likely to be flagged.
 
-An earlier version scored well but had learned the wrong thing. In one of the two training sources, tumour images were 512 px and dark while healthy images were about 240 px and brighter, so the model could tell the classes apart from image size and brightness alone. Its heatmaps sat on the skull edge and image border rather than on lesions.
+This set has no tumour scans, so it can't show how well the model finds tumours in scans from new hospitals.
 
-The old "external" set also turned out to be about 97% copies of training images, and near-duplicates across the train and test splits inflated the scores further.
+Full figures, including accuracy, F1 and ROC-AUC, are in [`docs/evaluation.md`](docs/evaluation.md).
 
-The fixes, all in this repo:
+## Finding and fixing a hidden shortcut
 
-- A leak-free split ([`experiments/leak_free_split/`](experiments/leak_free_split/)) that groups near-duplicate images, keeps each group in one split, and removes every training image that matches a test or external image. The split is checked by [`tests/test_split.py`](tests/test_split.py).
-- Preprocessing that removes the source cues: crop to the head, pad to a square, convert to greyscale, normalise brightness per image, then resize to 128×128.
-- Training that samples evenly across source and class, so neither source can stand in for the label.
+An earlier version of the model scored well, but it was cheating without anyone meaning it to. In one of the training datasets, the tumour images were large and dark and the healthy images were small and bright. The model learned to tell them apart by size and brightness instead of looking at the brain. Its heatmaps lit up the edge of the skull and the image border, not the tumours.
 
-One limit remains: the datasets carry no patient IDs, so slices from the same patient can still end up on both sides of the split.
+The test data had problems too. About 97% of the old "external" test set turned out to be copies of training images, and near-copies between the training and test sets made the scores look better than they were.
 
-## The model
+Fixing this took three changes:
 
-| | |
-|---|---|
-| Architecture | 5 convolution blocks with batch normalisation, global average pooling, linear head |
-| Parameters | 393,618, trained from scratch (no pretrained backbone) |
-| Input | 128×128 greyscale |
-| Weights | [`BrainTumorFinal.pt`](BrainTumorFinal.pt), 1.6 MB |
-| Speed on CPU | about 2 ms per prediction, about 16 ms for the full web pipeline |
-| Grad-CAM layer | 4th convolution block (a 16×16 map), coloured with the turbo colour map |
+- **Separating the data properly.** Near-copies are grouped together and kept on one side of the split, and any training image that matches a test image is removed. An automated test checks this.
+- **Hiding the giveaway clues.** Every image is cropped to the head, made square, turned greyscale, brightness-balanced and resized to the same size, so image size and brightness no longer give the answer away.
+- **Balanced training.** The model sees an even mix of each dataset and each class, so it can't use where an image came from to guess the answer.
 
-## Running it
+One gap remains. The datasets don't say which images come from the same patient, so images of one person could still end up in both training and testing.
 
-You need Python 3.13. The app runs on the CPU, so no GPU is required.
+## Limitations
+
+- It was trained on a few thousand public MRI images, without patient information or any clinical testing.
+- It does worse on scans from new sources and misses some tumours. A "No tumour" result never rules one out.
+- The scores are not probabilities. A 99% score does not mean a 99% chance of a tumour.
+- It gives an answer for any image, even one that isn't a brain MRI.
+- The heatmap is rough. It shows roughly where the model looked, not the outline of a tumour.
+
+## Built with
+
+Python, PyTorch (the AI model), OpenCV (image checks), FastAPI (the web server), and plain HTML, CSS and JavaScript for the web page. The assistant uses the Anthropic Python SDK.
+
+The model is small: 393,618 parameters and a 1.6 MB file. It runs on an ordinary CPU in about 2 ms per image, or about 16 ms including the quality checks and heatmap. It uses a Grad-CAM heatmap taken from the fourth of its five convolution blocks.
+
+## For developers
+
+### Running it
+
+You need Python 3.13. No GPU is required.
 
 ```bash
 python -m venv .venv
@@ -87,11 +95,9 @@ python -m venv .venv
 
 Then open http://127.0.0.1:8000 and try one of the sample scans.
 
-To turn on the "Ask about this result" assistant, set an Anthropic API key before starting the server (`set ANTHROPIC_API_KEY=...` on Windows, `export ANTHROPIC_API_KEY=...` elsewhere). Without one, everything else works and the assistant says it isn't set up.
+To turn on the assistant, set an Anthropic API key before starting the server (`set ANTHROPIC_API_KEY=...` on Windows, `export ANTHROPIC_API_KEY=...` elsewhere). Without one, everything else works and the assistant says it isn't set up.
 
-Uploads are limited to JPEG or PNG, 10 MB and 50 megapixels. Images are processed in memory and never written to disk.
-
-A [`Dockerfile`](Dockerfile) is included for packaging, but it has not been built or tested yet.
+Uploads are limited to JPEG or PNG, 10 MB and 50 megapixels. Images are processed in memory and never saved to disk.
 
 ### Tests
 
@@ -100,7 +106,7 @@ A [`Dockerfile`](Dockerfile) is included for packaging, but it has not been buil
 .venv\Scripts\python -m pytest
 ```
 
-The 53 tests cover preprocessing, the quality checks, the reliability rules, the API, the assistant (with a stand-in client, so no API key is needed), the leak-free split and a check that the app, `mainTest.py` and a direct model call give the same answer.
+The 53 tests cover image preparation, the quality checks, the reliability rules, the API, the assistant (with a stand-in client, so no API key is needed), the data split, and a check that the app, `mainTest.py` and a direct model call give the same answer.
 
 ### API
 
@@ -111,7 +117,7 @@ The 53 tests cover preprocessing, the quality checks, the reliability rules, the
 | `GET` | `/api/model` | Class names, input size, parameter count and the quality and reliability thresholds |
 | `GET` | `/api/health` | `{"status": "ok"}` |
 
-## Project layout
+### Project layout
 
 ```
 model.py               Model definitions, preprocessing and loading
@@ -122,20 +128,8 @@ mainTest.py            Predict on one image from the command line
 webapp/                FastAPI app and the static front end (HTML, CSS, JS)
 tests/                 pytest suite
 docs/                  Evaluation results, IXI results, app flow, screenshots
-experiments/           Investigation, leak-free split, training and evaluation scripts
+experiments/           Investigation, data split, training and evaluation scripts
 models/                Training run summaries (thresholds and validation scores)
 ```
 
-The training data is not in the repo. It came from two public Kaggle brain MRI collections plus IXI, and goes in `datasets/` (ignored by git). The trainer is [`experiments/engineer/train.py`](experiments/engineer/train.py); `mainTrain.py` is the original training script, kept so the earlier investigation can be reproduced.
-
-## Limitations
-
-- Trained on a few thousand public MRI slices, without patient information or clinical validation.
-- It does worse on scans from sources it was not trained on, and it misses some tumours. A "No tumour" result never rules one out.
-- Scores are raw model outputs, not calibrated probabilities. A 99% score does not mean a 99% chance.
-- It gives an answer for any image, including ones that are not brain MRIs.
-- The Grad-CAM map is coarse. It shows where the model looked, not an outline of the tumour.
-
-## Built with
-
-PyTorch, OpenCV, NumPy, FastAPI and Uvicorn, with a plain HTML, CSS and JavaScript front end (no build step). The optional assistant uses the Anthropic Python SDK.
+The training data is not in the repo. It came from two public Kaggle brain MRI collections plus IXI, and goes in `datasets/` (ignored by git). The trainer is [`experiments/engineer/train.py`](experiments/engineer/train.py). `mainTrain.py` is the original training script, kept so the earlier investigation can be reproduced.

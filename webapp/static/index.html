@@ -137,14 +137,15 @@
           <p class="fine">These statuses belong to the research demo and carry no clinical meaning.</p>
         </article>
 
-        <article class="card assistant-card" aria-label="Ask about this result">
-          <h2>Ask about this result</h2>
-          <p class="muted-text">Answers come from Claude, an AI model, using only the numbers above. The image is never sent. Answers can be wrong and are not medical advice.</p>
+        <article class="card assistant-card" aria-label="Ask the assistant">
+          <h2>Ask the assistant</h2>
+          <p class="muted-text">It explains this result, and if you or someone close to you has been diagnosed, it can talk through next steps and help find counselling and support groups near you. It uses Claude, an AI model, and sees only the numbers above, never the image. It can be wrong and is not medical advice.</p>
+          <p class="crisis-line">In crisis? In the US call or text <strong>988</strong>, or call <strong>911</strong> in an emergency.</p>
           <div id="chat-log" class="chat-log" aria-live="polite"></div>
           <button id="explain" class="button" type="button">Explain this result</button>
           <form id="chat-form" class="chat-form" hidden>
             <label for="chat-input" class="sr-only">Your question</label>
-            <input id="chat-input" type="text" maxlength="500" placeholder="Ask a follow-up question" autocomplete="off" required>
+            <input id="chat-input" type="text" maxlength="500" placeholder="e.g. support groups near me" autocomplete="off" required>
             <button class="button" type="submit">Ask</button>
           </form>
         </article>
